@@ -1,3 +1,4 @@
+
 package com.goutam.razorpay.api_gateway_service.security;
 
 import com.goutam.razorpay.common_lib.exception.RateLimitException;
@@ -18,11 +19,10 @@ import tools.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.util.Map;
 
-
 @Slf4j
 @Component
 @RequiredArgsConstructor
-@Order(Ordered.HIGHEST_PRECEDENCE+1)
+@Order(Ordered.HIGHEST_PRECEDENCE + 1)
 public class GatewayAuthFilter extends OncePerRequestFilter {
 
     private static final String BEARER_PREFIX = "Bearer ";
@@ -33,52 +33,119 @@ public class GatewayAuthFilter extends OncePerRequestFilter {
     private final PublicRouteMatcher publicRouteMatcher;
     private final ObjectMapper objectMapper;
 
-
     @Override
-    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
-                                    FilterChain filterChain) throws ServletException, IOException {
+    protected void doFilterInternal(
+            HttpServletRequest request,
+            HttpServletResponse response,
+            FilterChain filterChain
+    ) throws ServletException, IOException {
 
-        log.info("Incoming request: {}", request.getRequestURI());
+        String path = request.getRequestURI();
 
-        if (publicRouteMatcher.isPublic(request.getRequestURI())) {
+        log.info("Incoming request: {}", path);
+
+        // Skip authentication for public endpoints
+        if (publicRouteMatcher.isPublic(path)) {
             filterChain.doFilter(request, response);
             return;
         }
 
         String authHeader = request.getHeader("Authorization");
 
+        Map<String, String> identityHeaders;
+
         try {
-            Map<String, String> identityHeaders = Map.of();
+
             if (authHeader != null && authHeader.startsWith(BASIC_PREFIX)) {
+
                 identityHeaders = apiKeyAuthHandler.authenticate(authHeader, response);
+
             } else if (authHeader != null && authHeader.startsWith(BEARER_PREFIX)) {
-                identityHeaders = jwtAuthHandler.authenticate(authHeader.substring(BEARER_PREFIX.length()));
+
+                identityHeaders = jwtAuthHandler.authenticate(
+                        authHeader.substring(BEARER_PREFIX.length())
+                );
+
             } else {
-                reject(response, HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "Missing or invalid Authorization header");
+
+                reject(
+                        response,
+                        HttpStatus.UNAUTHORIZED,
+                        "UNAUTHORIZED",
+                        "Missing or invalid Authorization header"
+                );
+
                 return;
             }
 
-            HeaderAugmentingRequestWrapper wrapped = new HeaderAugmentingRequestWrapper(request);
-            identityHeaders.forEach(wrapped::putHeader);
-
-            filterChain.doFilter(wrapped, response);
         } catch (RateLimitException e) {
-            response.setHeader("Retry-After", String.valueOf(e.getRetryAfterSeconds()));
-            reject(response, HttpStatus.TOO_MANY_REQUESTS, "RATE_LIMIT_EXCEEDED", e.getMessage());
+
+            response.setHeader(
+                    "Retry-After",
+                    String.valueOf(e.getRetryAfterSeconds())
+            );
+
+            reject(
+                    response,
+                    HttpStatus.TOO_MANY_REQUESTS,
+                    "RATE_LIMIT_EXCEEDED",
+                    e.getMessage()
+            );
+
+            return;
+
         } catch (GatewayAuthenticationException e) {
-            reject(response, HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", e.getMessage());
+
+            reject(
+                    response,
+                    HttpStatus.UNAUTHORIZED,
+                    "UNAUTHORIZED",
+                    e.getMessage()
+            );
+
+            return;
+
         } catch (Exception e) {
-            log.warn("Gateway auth failed for path={}", request.getRequestURI(), e);
-            reject(response, HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "Invalid credentials");
+
+            log.error("Gateway authentication failed for path={}", path, e);
+
+            reject(
+                    response,
+                    HttpStatus.UNAUTHORIZED,
+                    "UNAUTHORIZED",
+                    "Invalid credentials"
+            );
+
+            return;
         }
 
+        // Add authenticated identity headers
+        HeaderAugmentingRequestWrapper wrapped =
+                new HeaderAugmentingRequestWrapper(request);
+
+        identityHeaders.forEach(wrapped::putHeader);
+
+        // Continue the filter chain outside the authentication try-catch
+        filterChain.doFilter(wrapped, response);
     }
 
-    private void reject(HttpServletResponse response, HttpStatus status, String errorCode, String message)
-            throws IOException {
+    private void reject(
+            HttpServletResponse response,
+            HttpStatus status,
+            String errorCode,
+            String message
+    ) throws IOException {
+
         response.setStatus(status.value());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        objectMapper.writeValue(response.getWriter(), Map.of("errorCode", errorCode, "errorDescription", message));
+
+        objectMapper.writeValue(
+                response.getWriter(),
+                Map.of(
+                        "errorCode", errorCode,
+                        "errorDescription",
+                        message != null ? message : "Authentication failed"
+                )
+        );
     }
 }
-

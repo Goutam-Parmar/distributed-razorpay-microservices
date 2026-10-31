@@ -4,14 +4,13 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.util.Optional;
 
 @Slf4j
 @RequiredArgsConstructor
-public class redisIdempotencyStore implements IdempotencyStore{
+public class RedisIdempotencyStore implements IdempotencyStore{
 
     private static final String PREFIX = "idempotency:";
     private final StringRedisTemplate redis;

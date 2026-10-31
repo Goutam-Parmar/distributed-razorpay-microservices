@@ -3,3 +3,4 @@ com.goutam.razorpay.common_lib.Config.SharedKafkaAutoConfiguration
 com.goutam.razorpay.common_lib.Idempotancy.SharedResilienceAutoConfiguration
 com.goutam.razorpay.common_lib.exception.SharedExceptionAutoConfiguration
 com.goutam.razorpay.common_lib.util.SharedSecurityAutoConfiguration
+com.goutam.razorpay.common_lib.web.SharedWebFilterAutoConfiguration
