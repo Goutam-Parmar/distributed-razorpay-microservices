@@ -19,10 +19,13 @@ import com.goutam.razorpay.payment_service.repository.OrderRepository;
 import com.goutam.razorpay.payment_service.repository.PaymentRepository;
 import com.goutam.razorpay.payment_service.service.OrderPersistenceService;
 import com.goutam.razorpay.payment_service.service.OrderService;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.retry.annotation.Retry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
@@ -47,7 +50,9 @@ public class OrderServiceImpl implements OrderService {
     private int defaultOrderExpiryMinutes;
 
     @Override
-    @Transactional
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    @CircuitBreaker(name = "merchant-service")
+    @Retry(name = "merchant-service")
    public OrderResponseDto create(UUID merchantId, OrderRequestDto request) {
         if(request.receipt()!=null && orderRepository.existsByMerchantIdAndReceipt(merchantId, request.receipt())){
             throw new DuplicateResourceException("ORDER_RECEIPT_DUPLICATE","Order with this receipt already exists for the merchant "+request.receipt());
@@ -65,31 +70,7 @@ public class OrderServiceImpl implements OrderService {
 
         return orderPersistenceService.persist(merchantId, request, customerId, defaultOrderExpiryMinutes);
 
-//        OrderRecord order = OrderRecord.builder()
-//                .receipt(request.receipt())
-//                .amount(request.amount())
-//                .notes(request.notes())
-//                .merchantId(merchantId)
-//                .customerId(customerId)
-//                .orderStatus(OrderStatus.CREATED)
-//                .expiresAt(
-//                        request.expiresAt() != null
-//                                ? request.expiresAt()
-//                                : LocalDateTime.now().plusMinutes(defaultOrderExpiryMinutes)
-//                )
-//                .build();
-//        order = orderRepository.save(order);
 
-//        eventPublisher.publish(EventAggregateType.ORDER, order.getId(), "ORDER_CREATED",
-//                Map.of("orderId", order.getId(),
-//                        "merchantId", merchantId.toString(),
-//                        "orderStatus", order.getOrderStatus().name(),
-//                        "amountUnits", order.getAmount().getAmountUnits(),
-//                        "amountCurrency", order.getAmount().getCurrency()
-//                )
-//        );
-
-       // return orderMapper.toResponse(order);
     }
 
     @Override
